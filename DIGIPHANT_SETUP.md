@@ -15,10 +15,11 @@
 
 The requested public fork now exists at
 `https://github.com/cora-lee/studentstarter`. The branch
-`feature/collective-pause-gesture` was created there. Local Git commits could not
-yet be uploaded because terminal Git has no GitHub credential and Chrome blocks
-local file upload until the ChatGPT extension's “Allow access to file URLs”
-setting is enabled.
+`feature/collective-pause-gesture` contains the uploaded implementation and
+submission documents. Its verified latest remote commit is
+`986a5bf68a12f1c713de83c0278236ebb315c595`
+(`docs: record Unity Play mode verification`). The website upload path was used
+because this computer's terminal Git has no GitHub credential.
 
 ## Added MediaPipe Vision Task: Gesture Recognizer
 
