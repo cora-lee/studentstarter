@@ -152,6 +152,16 @@ namespace DigiPhant.Editor
                 slot = i, values = new float[6], confidence = Enumerable.Repeat(1f, 6).ToArray() }).ToArray() };
             Check(c.AcceptPacket(JsonUtility.ToJson(baseline), 10), "Baseline rejected");
             Check(c.CalibrateAt(10), "Calibration failed");
+            baseline.teamPause = true;
+            Check(c.AcceptPacket(JsonUtility.ToJson(baseline), 10) && c.IsTeamPauseActive(10),
+                "Complete collective pause packet rejected");
+            var incompletePause = new PoseFrame { version = 1, teamPause = true,
+                people = baseline.people.Take(2).ToArray() };
+            Check(!c.AcceptPacket(JsonUtility.ToJson(incompletePause), 10),
+                "Incomplete group activated collective pause");
+            baseline.teamPause = false;
+            Check(c.AcceptPacket(JsonUtility.ToJson(baseline), 10) && !c.IsTeamPauseActive(10),
+                "Collective pause did not release");
             Check(c.AcceptPacket(packet, 10), "Valid packet rejected");
             Check(!c.AcceptPacket("{\"version\":1,\"people\":[{\"slot\":5}]}", 10), "Invalid packet accepted");
             c.ApplyControls(10, 1);
@@ -199,6 +209,7 @@ namespace DigiPhant.Editor
             Four();
             Check(c.performerCount == 4 && c.controls.Single(x => x.label == "Trunk curl").performer == 4, "Four-person preset failed");
             Three();
+            c.SetInputMode(InputMode.Camera);
             c.SetUpperBodyOnly(true);
             Check(!c.IsCalibrated, "Movement mode retained calibration");
             Check(!c.AcceptPacket(JsonUtility.ToJson(baseline), 40), "Full-body packet accepted in seated mode");
@@ -208,7 +219,8 @@ namespace DigiPhant.Editor
             baseline.people[0].values[2] = 1;
             Check(c.AcceptPacket(JsonUtility.ToJson(baseline), 40), "Seated hand-to-leg packet rejected");
             c.ApplyControls(40, 1);
-            Check(Quaternion.Angle(initial, bone.localRotation) > 10, "Seated hand input failed to drive leg");
+            float seatedLegAngle = Quaternion.Angle(initial, bone.localRotation);
+            Check(seatedLegAngle > 10, "Seated hand input failed to drive leg (angle " + seatedLegAngle.ToString("F3") + ")");
             c.BeginCalibrationCountdown(50);
             Check(c.CalibrationPending && !c.IsCalibrated, "Countdown did not clear calibration");
             c.UpdateCalibrationCountdown(59);
