@@ -400,9 +400,9 @@ namespace DigiPhant
             GUILayout.BeginVertical(GUILayout.Width(contentWidth));
             for (int i = 0; i < labels.Length; i++)
             {
-                bool active = GUILayout.Toggle(i == selected, labels[i], style,
-                    GUILayout.Width(contentWidth), GUILayout.Height(height));
-                if (active) result = i;
+                string text = (i == selected ? "✓  " : "") + labels[i];
+                if (GUILayout.Button(text, style, GUILayout.Width(contentWidth), GUILayout.Height(height)))
+                    result = i;
             }
             GUILayout.EndVertical();
             return result;
