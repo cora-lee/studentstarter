@@ -257,13 +257,13 @@ namespace DigiPhant
             if (controller.inputMode == InputMode.TestSliders)
             {
                 GUILayout.Label("Travel: backward / stop / forward", label, GUILayout.Width(width));
-                testForward = GUILayout.HorizontalSlider(testForward, -1, 1);
+                testForward = GUILayout.HorizontalSlider(testForward, -1, 1, GUILayout.Width(width));
                 GUILayout.Label("Turn: left / straight / right", label, GUILayout.Width(width));
-                testSteering = GUILayout.HorizontalSlider(testSteering, -1, 1);
-                if (GUILayout.Button("Stop moving")) StopMotion();
+                testSteering = GUILayout.HorizontalSlider(testSteering, -1, 1, GUILayout.Width(width));
+                if (GUILayout.Button("Stop moving", GUILayout.Width(width))) StopMotion();
             }
             else GUILayout.Label("Speed and steering use the movement mappings in the Inspector.", label, GUILayout.Width(width));
-            if (GUILayout.Button("Return to starting position")) ResetPosition();
+            if (GUILayout.Button("Return to starting position", GUILayout.Width(width))) ResetPosition();
             GUILayout.Space(8);
         }
     }
