@@ -147,13 +147,13 @@ namespace DigiPhant
             if (IsRecording)
             {
                 GUILayout.Label("RECORDING · " + Mathf.FloorToInt(Time.realtimeSinceStartup - started) + " seconds");
-                if (GUILayout.Button("Stop recording and save")) StopRecording();
+                if (GUILayout.Button("Stop recording and save", GUILayout.Width(width))) StopRecording();
             }
             else
             {
                 bool wasEnabled = GUI.enabled;
                 GUI.enabled = wasEnabled && encoder == null;
-                if (GUILayout.Button("Record performance")) BeginRecording();
+                if (GUILayout.Button("Record performance", GUILayout.Width(width))) BeginRecording();
                 GUI.enabled = wasEnabled;
             }
             GUILayout.Label(Status, new GUIStyle(GUI.skin.label) { wordWrap = true }, GUILayout.Width(width));
