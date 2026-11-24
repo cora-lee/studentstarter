@@ -1,9 +1,55 @@
 import unittest
 from types import SimpleNamespace
-from bridge import PerformerTracker, extract_features, requested_count
+from bridge import (CollectivePauseDetector, PerformerTracker,
+                    associate_hand_gestures, everyone_shows_open_palm,
+                    extract_features, requested_count)
 
 
 class TrackingTests(unittest.TestCase):
+    @staticmethod
+    def pose_points():
+        points = [SimpleNamespace(x=.5, y=.5, presence=1., visibility=1.) for _ in range(33)]
+        for i, xy in {11:(.4,.3), 12:(.6,.3), 15:(.4,.5), 16:(.6,.5),
+                      23:(.43,.6), 24:(.57,.6)}.items():
+            points[i].x, points[i].y = xy
+        return points
+
+    def test_gestures_are_matched_to_nearest_performer_wrist(self):
+        first, second = self.pose_points(), self.pose_points()
+        first[15].x, first[16].x = .2, .4
+        second[15].x, second[16].x = .6, .8
+        observations = [((.3, .5), [], [], first), ((.7, .5), [], [], second)]
+        result = SimpleNamespace(
+            hand_landmarks=[[SimpleNamespace(x=.21, y=.5)],
+                            [SimpleNamespace(x=.79, y=.5)]],
+            gestures=[[SimpleNamespace(category_name='Open_Palm', score=.9)],
+                      [SimpleNamespace(category_name='Victory', score=.8)]])
+        matched = associate_hand_gestures(result, {1: 0, 2: 1}, observations)
+        self.assertEqual(matched[1]['leftGesture'], 'Open_Palm')
+        self.assertEqual(matched[2]['rightGesture'], 'Victory')
+        self.assertTrue(everyone_shows_open_palm({1: matched[1]}, 1))
+        self.assertFalse(everyone_shows_open_palm(matched, 2))
+
+    def test_low_confidence_or_distant_gesture_is_not_assigned(self):
+        pose = self.pose_points()
+        observations = [((.5, .5), [], [], pose)]
+        result = SimpleNamespace(
+            hand_landmarks=[[SimpleNamespace(x=.5, y=.5)],
+                            [SimpleNamespace(x=.95, y=.95)]],
+            gestures=[[SimpleNamespace(category_name='Open_Palm', score=.54)],
+                      [SimpleNamespace(category_name='Closed_Fist', score=.99)]])
+        matched = associate_hand_gestures(result, {1: 0}, observations)
+        self.assertEqual(matched[1]['leftGesture'], '')
+        self.assertEqual(matched[1]['rightGesture'], '')
+
+    def test_collective_pause_is_debounced_and_releases_immediately(self):
+        detector = CollectivePauseDetector(hold_seconds=.6)
+        self.assertFalse(detector.update(True, 10.0))
+        self.assertFalse(detector.update(True, 10.59))
+        self.assertTrue(detector.update(True, 10.6))
+        self.assertFalse(detector.update(False, 10.61))
+        self.assertFalse(detector.update(True, 11.0))
+
     def test_roles_survive_detection_reordering_and_dropout(self):
         t = PerformerTracker(3)
         self.assertEqual(t.assign([(.8, .5), (.2, .5)]), {})

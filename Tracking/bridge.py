@@ -12,6 +12,73 @@ FEATURES = ('LeftHandHeight', 'RightHandHeight', 'LeftFootLift', 'RightFootLift'
 MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task'
 
 
+def associate_hand_gestures(result, assignments, observations,
+                            max_distance=.18, minimum_score=.55):
+    """Match Gesture Recognizer hands to the nearest assigned Pose wrist."""
+    matched = {slot: {'leftGesture': '', 'leftGestureScore': 0.,
+                      'rightGesture': '', 'rightGestureScore': 0.}
+               for slot in assignments}
+    candidates = []
+    for hand_index, hand_landmarks in enumerate(result.hand_landmarks):
+        if hand_index >= len(result.gestures) or not result.gestures[hand_index]:
+            continue
+        category = result.gestures[hand_index][0]
+        name, score = category.category_name, category.score
+        if name in ('None', 'Unknown') or score < minimum_score or not hand_landmarks:
+            continue
+        wrist = hand_landmarks[0]
+        if not math.isfinite(wrist.x) or not math.isfinite(wrist.y):
+            continue
+        for slot, observation_index in assignments.items():
+            pose = observations[observation_index][3]
+            for side, pose_index in (('left', 15), ('right', 16)):
+                landmark = pose[pose_index]
+                if (not math.isfinite(landmark.x) or not math.isfinite(landmark.y)
+                        or min(landmark.visibility, landmark.presence) < .5):
+                    continue
+                distance = math.dist((wrist.x, wrist.y), (landmark.x, landmark.y))
+                if distance <= max_distance:
+                    candidates.append((distance, hand_index, slot, side, name, score))
+    used_hands, used_wrists = set(), set()
+    for _, hand_index, slot, side, name, score in sorted(candidates):
+        target = (slot, side)
+        if hand_index in used_hands or target in used_wrists:
+            continue
+        used_hands.add(hand_index)
+        used_wrists.add(target)
+        matched[slot][side + 'Gesture'] = name
+        matched[slot][side + 'GestureScore'] = score
+    return matched
+
+
+def everyone_shows_open_palm(gestures, performer_count):
+    """Return true only when every selected performer has an Open_Palm."""
+    return len(gestures) == performer_count and all(
+        data['leftGesture'] == 'Open_Palm' or data['rightGesture'] == 'Open_Palm'
+        for data in gestures.values())
+
+
+class CollectivePauseDetector:
+    """Require a stable all-performer vote before activating team pause."""
+    def __init__(self, hold_seconds=.6):
+        self.hold_seconds = hold_seconds
+        self.started_at = None
+        self.active = False
+
+    def reset(self):
+        self.started_at = None
+        self.active = False
+
+    def update(self, unanimous_gesture, now):
+        if not unanimous_gesture:
+            self.reset()
+        elif self.started_at is None:
+            self.started_at = now
+        elif now - self.started_at + 1e-9 >= self.hold_seconds:
+            self.active = True
+        return self.active
+
+
 def extract_features(landmarks, upper_body_only=False):
     """Body-relative image measurements; Unity subtracts the calibrated neutral pose."""
     def xy(i):
@@ -126,6 +193,8 @@ def main():
     parser.add_argument('--camera', type=int, default=0)
     parser.add_argument('--port', type=int, default=5055)
     parser.add_argument('--model', type=Path, default=Path(__file__).parent / 'pose_landmarker_full.task')
+    parser.add_argument('--gesture-model', type=Path,
+                        default=Path(__file__).parent / 'gesture_recognizer.task')
     parser.add_argument('--download-model', action='store_true', help='Download the official model if missing')
     args = parser.parse_args()
     if not 1024 <= args.port <= 65533:
@@ -139,6 +208,8 @@ def main():
         print('Downloading the official MediaPipe pose model...')
         urllib.request.urlretrieve(MODEL_URL, temporary)
         temporary.replace(args.model)
+    if not args.gesture_model.exists():
+        parser.error('Gesture model missing: ' + str(args.gesture_model))
     import cv2
     import mediapipe as mp
     from mediapipe.tasks import python
@@ -149,7 +220,13 @@ def main():
         running_mode=vision.RunningMode.VIDEO, num_poses=4,
         min_pose_detection_confidence=.5, min_pose_presence_confidence=.5,
         min_tracking_confidence=.5)
+    gesture_options = vision.GestureRecognizerOptions(
+        base_options=python.BaseOptions(model_asset_path=str(args.gesture_model)),
+        running_mode=vision.RunningMode.VIDEO, num_hands=8,
+        min_hand_detection_confidence=.5, min_hand_presence_confidence=.5,
+        min_tracking_confidence=.5)
     tracker = PerformerTracker(args.people)
+    pause_detector = CollectivePauseDetector()
     camera = cv2.VideoCapture(args.camera)
     if not camera.isOpened():
         raise SystemExit('Camera could not open. Check permissions or try --camera 1.')
@@ -169,9 +246,11 @@ def main():
     previous_timestamp = -1
     last_preview = 0.0
     print('Stand side by side, all visible. IDs start left-to-right in the unmirrored preview.')
+    print('Show Open Palm together for 0.6 seconds to pause. Lower a hand to resume.')
     print('R: reset identities (then recalibrate in Unity). Q: quit.')
     try:
-        with vision.PoseLandmarker.create_from_options(options) as detector:
+        with (vision.PoseLandmarker.create_from_options(options) as detector,
+              vision.GestureRecognizer.create_from_options(gesture_options) as gesture_detector):
             while True:
                 for _ in range(32):
                     try:
@@ -186,15 +265,18 @@ def main():
                                 if type(upper) is bool and upper != args.upper_body_only:
                                     args.upper_body_only = upper
                                     tracker.reset()
+                                    pause_detector.reset()
                                     print('Movement mode changed. Set neutral pose in Unity.')
                                 if command.get('reset') is True:
                                     tracker.reset()
+                                    pause_detector.reset()
                         except (ValueError, UnicodeError):
                             pass
                     count = requested_count(data) if address == ('127.0.0.1', args.port) else None
                     if count is not None and count != args.people:
                         args.people = count
                         tracker = PerformerTracker(count)
+                        pause_detector.reset()
                         print(f'Unity selected {count} people. Reassigning; set neutral pose in Unity.')
                 ok, frame = camera.read()
                 if not ok:
@@ -202,14 +284,22 @@ def main():
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 timestamp = max(previous_timestamp + 1, time.monotonic_ns() // 1_000_000)
                 previous_timestamp = timestamp
-                result = detector.detect_for_video(mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb), timestamp)
+                mp_frame = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+                result = detector.detect_for_video(mp_frame, timestamp)
+                gesture_result = gesture_detector.recognize_for_video(mp_frame, timestamp)
                 observations = []
                 for landmarks in result.pose_landmarks:
                     center, values, confidence = extract_features(landmarks, args.upper_body_only)
                     if confidence[4] >= .5:
                         observations.append((center, values, confidence, landmarks))
                 assignments = tracker.assign([o[0] for o in observations])
-                packet = {'version': 1, 'performerCount': args.people, 'upperBodyOnly': args.upper_body_only, 'people': [dict(slot=slot, values=observations[i][1], confidence=observations[i][2])
+                gestures = associate_hand_gestures(gesture_result, assignments, observations)
+                team_pause = pause_detector.update(
+                    everyone_shows_open_palm(gestures, args.people), time.monotonic())
+                packet = {'version': 1, 'performerCount': args.people,
+                          'upperBodyOnly': args.upper_body_only, 'teamPause': team_pause,
+                          'people': [dict(slot=slot, values=observations[i][1],
+                                          confidence=observations[i][2], **gestures[slot])
                                                  for slot, i in assignments.items()]}
                 sender.sendto(json.dumps(packet, allow_nan=False).encode(), ('127.0.0.1', args.port))
                 h, w = frame.shape[:2]
@@ -238,6 +328,12 @@ def main():
                     anchor = points.get(11, next(iter(points.values()), None))
                     if anchor is not None:
                         label = f'P{slot}' if slot is not None else 'Unassigned'
+                        if slot is not None:
+                            names = [gestures[slot][side + 'Gesture']
+                                     for side in ('left', 'right')
+                                     if gestures[slot][side + 'Gesture']]
+                            if names:
+                                label += ' ' + '/'.join(names)
                         font_scale = max(.6, thickness * .3)
                         cv2.putText(frame, label, anchor, cv2.FONT_HERSHEY_SIMPLEX, font_scale,
                                     (20, 20, 20), thickness + 2, cv2.LINE_AA)
@@ -246,6 +342,8 @@ def main():
                 message = f'{len(assignments)}/{args.people} assigned' if args.no_window else f'{len(assignments)}/{args.people} assigned | R: reassign | Q: quit'
                 if tracker.positions is None:
                     message = f'Waiting for {args.people} visible people' if args.no_window else f'Stand side by side: waiting for {args.people} visible people | Q: quit'
+                elif team_pause:
+                    message = 'COLLECTIVE OPEN PALM PAUSE - lower a hand to resume'
                 cv2.putText(frame, message, (12, 26), cv2.FONT_HERSHEY_SIMPLEX, .55, (255, 255, 255), 2)
                 now = time.monotonic()
                 if now - last_preview >= .1:
@@ -265,6 +363,7 @@ def main():
                     break
                 if key == ord('r'):
                     tracker.reset()
+                    pause_detector.reset()
     finally:
         sender.sendto(b'{"version":1,"people":[]}', ('127.0.0.1', args.port))
         sender.close()
@@ -273,4 +372,7 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
