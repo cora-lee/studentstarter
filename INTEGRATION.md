@@ -33,11 +33,16 @@ Each JSON datagram contains a complete current snapshot, not a partial update:
   "version": 1,
   "performerCount": 3,
   "upperBodyOnly": false,
+  "teamPause": false,
   "people": [
     {
       "slot": 1,
       "values": [0.0, 0.0, -1.0, -1.0, 0.0, 0.5],
-      "confidence": [0.9, 0.9, 0.8, 0.8, 0.9, 0.9]
+      "confidence": [0.9, 0.9, 0.8, 0.8, 0.9, 0.9],
+      "leftGesture": "Open_Palm",
+      "leftGestureScore": 0.91,
+      "rightGesture": "",
+      "rightGestureScore": 0.0
     }
   ]
 }
@@ -48,6 +53,19 @@ confidence from an older packet. `people: []` means no assigned performers.
 Slots range from 1 to 4. The six values are finite, body-relative measurements
 clamped to [-3, 3]; they are not calibrated control values, angles or metres.
 Confidence combines the minimum landmark visibility and presence for each input.
+
+The gesture fields come from the separate MediaPipe Gesture Recognizer task. Each
+detected hand is associated with the nearest visible Pose wrist, rather than being
+treated as a global gesture. Blank names and zero scores mean no confident match.
+The bundled canned model can report `Closed_Fist`, `Open_Palm`, `Pointing_Up`,
+`Thumb_Down`, `Thumb_Up`, `Victory`, and `ILoveYou`.
+
+`teamPause` is an optional, backward-compatible boolean. The bridge sets it only
+after every assigned performer has shown at least one confident `Open_Palm` for
+0.6 seconds. Unity accepts an active pause only when all selected performer slots
+are present and fresh. It immediately stops locomotion and eases body controls
+toward neutral; when any person lowers or closes the hand, pause releases without
+changing calibration or role assignments.
 
 | Index | Signal | Full-body measurement | Upper-body measurement |
 | --- | --- | --- | --- |
