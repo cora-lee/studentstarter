@@ -383,28 +383,57 @@ namespace DigiPhant
             }
         }
         void OnDisable() { calibrationDeadline = -1; StopReceiver(); GetComponent<DigiPhantLocomotion>()?.StopAnimation(); ResetControls(); }
+
+        int DrawChoiceList(int selected, string[] labels, float contentWidth, float height)
+        {
+            // A vertical choice list is deliberately used here. Unity IMGUI gives
+            // buttons their own margins, so even a calculated multi-column row can
+            // still overflow a narrow Game view and create a horizontal scrollbar.
+            var style = new GUIStyle(GUI.skin.button)
+            {
+                wordWrap = true,
+                alignment = TextAnchor.MiddleCenter,
+                fontSize = Mathf.Clamp(Mathf.RoundToInt(Screen.height * .018f), 11, 15)
+            };
+            int result = selected;
+            GUILayout.BeginVertical(GUILayout.Width(contentWidth));
+            for (int i = 0; i < labels.Length; i++)
+            {
+                bool active = GUILayout.Toggle(i == selected, labels[i], style,
+                    GUILayout.Width(contentWidth), GUILayout.Height(height));
+                if (active) result = i;
+            }
+            GUILayout.EndVertical();
+            return result;
+        }
         void OnGUI()
         {
             if (!showControls) return;
-            float width = Mathf.Min(350, Screen.width * .32f);
+            float width = Mathf.Min(350, Mathf.Max(280, Screen.width * .32f));
+            width = Mathf.Min(width, Screen.width - 20);
+            // Leave room for the box padding and the vertical scrollbar itself.
+            float contentWidth = Mathf.Max(120, width - 60);
             GUI.DrawTexture(new Rect(0, 0, width + 20, Screen.height), Texture2D.blackTexture, ScaleMode.StretchToFill, false);
             var labelStyle = new GUIStyle(GUI.skin.label) { wordWrap = true };
-            void Label(string text) => GUILayout.Label(text, labelStyle, GUILayout.Width(width - 32));
+            void Label(string text) => GUILayout.Label(text, labelStyle, GUILayout.Width(contentWidth));
             GUILayout.BeginArea(new Rect(10, 10, width, Screen.height - 20), GUI.skin.box);
-            GetComponent<DigiPhantCameraPreview>()?.DrawInline(width - 20);
-            GetComponent<DigiPhantRecording>()?.DrawControls(width - 32);
-            scroll = GUILayout.BeginScrollView(scroll);
+            GetComponent<DigiPhantCameraPreview>()?.DrawInline(contentWidth);
+            GetComponent<DigiPhantRecording>()?.DrawControls(contentWidth);
+            scroll = GUILayout.BeginScrollView(scroll, false, true, GUIStyle.none, GUI.skin.verticalScrollbar,
+                GUILayout.Width(contentWidth));
             Label("DIGIPHANT | collective digital twin");
             Label("Choose your group size");
-            int count = GUILayout.Toolbar(performerCount - 1, new[] { "1", "2", "3", "4" }) + 1;
+            int count = DrawChoiceList(performerCount - 1,
+                new[] { "Group size 1", "Group size 2", "Group size 3", "Group size 4" }, contentWidth, 28) + 1;
             if (count != performerCount) SetPerformerCount(count);
-            bool upper = GUILayout.Toolbar(upperBodyOnly ? 1 : 0, new[] { "Full body", "Seated / upper body" }) == 1;
+            bool upper = DrawChoiceList(upperBodyOnly ? 1 : 0,
+                new[] { "Full body", "Seated / upper body" }, contentWidth, 36) == 1;
             if (upper != upperBodyOnly) SetUpperBodyOnly(upper);
             if (upperBodyOnly) Label("Keep shoulders and hands visible. Raise hands for legs; tilt shoulders for steering, head and tail. Solo: left hand also drives travel; right hand curls trunk.");
-            int mode = GUILayout.Toolbar((int)inputMode, new[] { "Test sliders", "Camera" });
+            int mode = DrawChoiceList((int)inputMode, new[] { "Test sliders", "Camera" }, contentWidth, 34);
             if (mode != (int)inputMode) SetInputMode((InputMode)mode);
             Label(Status);
-            GetComponent<DigiPhantLocomotion>()?.DrawControls(width - 32);
+            GetComponent<DigiPhantLocomotion>()?.DrawControls(contentWidth);
             if (inputMode == InputMode.Camera)
             {
                 for (int i = 1; i <= performerCount; i++)
@@ -434,9 +463,9 @@ namespace DigiPhant
                 foreach (var c in controls)
                 {
                     Label(c.label + "  · P" + c.performer);
-                    c.testValue = GUILayout.HorizontalSlider(c.testValue, -1, 1);
+                    c.testValue = GUILayout.HorizontalSlider(c.testValue, -1, 1, GUILayout.Width(contentWidth));
                 }
-                if (GUILayout.Button("Reset body sliders")) ResetControls();
+                if (GUILayout.Button("Reset body sliders", GUILayout.Width(contentWidth))) ResetControls();
             }
             GUILayout.Space(8);
             Label("To adapt: stop Play, select DigiPhant Controls,\nthen edit Controls in the Inspector.");
