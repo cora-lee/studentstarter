@@ -3,8 +3,9 @@
 ## Code and reconstruction
 
 - [x] Create the requested fork at `https://github.com/cora-lee/studentstarter`.
-- [ ] Push branch `feature/collective-pause-gesture` and preserve source commit
-      `4e6dab5271c618d1c0bfb2022c41c0d37cd8d69f`.
+- [x] Upload implementation and documents to branch
+      `feature/collective-pause-gesture`; see its visible history for the
+      current commit.
 - [ ] Follow `STUDENT_GIT.md` for the actual lightweight group Unity repository.
       The starter fork alone is not the complete student-project submission.
 - [ ] Include the adapted scripts, scene/meta files, package configuration,
@@ -25,10 +26,12 @@
 ## Links and narrative
 
 - [ ] GitHub group-project link.
-- [ ] GitHub feature branch/commit link.
+- [x] GitHub feature branch:
+      `https://github.com/cora-lee/studentstarter/tree/feature/collective-pause-gesture`.
 - [ ] Accessible Drive video link.
 - [ ] Team member roles and individual contributions.
-- [ ] Actual test results and known limitations.
+- [x] Actual test results and known limitations are recorded in
+      `DIGIPHANT_SETUP.md`.
 - [ ] Course-required journal/reflection.
 
 ## Teachable Machine
