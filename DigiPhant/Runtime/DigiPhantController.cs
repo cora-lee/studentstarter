@@ -75,6 +75,7 @@ namespace DigiPhant
         readonly Dictionary<Transform, Quaternion> rest = new Dictionary<Transform, Quaternion>();
         UdpClient socket;
         Vector2 scroll;
+        bool showGroupChoices;
         float nextCountRequest;
         int previousCount;
         InputMode previousMode;
@@ -421,21 +422,28 @@ namespace DigiPhant
             GetComponent<DigiPhantRecording>()?.DrawControls(contentWidth);
             scroll = GUILayout.BeginScrollView(scroll, false, true, GUIStyle.none, GUI.skin.verticalScrollbar,
                 GUILayout.Width(contentWidth));
-            Label("DIGIPHANT | collective digital twin");
-            Label("Choose your group size");
-            int count = DrawChoiceList(performerCount - 1,
-                new[] { "Group size 1", "Group size 2", "Group size 3", "Group size 4" }, contentWidth, 28) + 1;
-            if (count != performerCount) SetPerformerCount(count);
+            Label("SET UP IN THREE STEPS");
+            Label("1. TEAM");
+            if (GUILayout.Button("Team: " + performerCount + (performerCount == 1 ? " person (solo)" : " people") + "  - change", GUILayout.Width(contentWidth)))
+                showGroupChoices = !showGroupChoices;
+            if (showGroupChoices)
+            {
+                int count = DrawChoiceList(performerCount - 1,
+                    new[] { "1 person - solo", "2 people", "3 people", "4 people" }, contentWidth, 28) + 1;
+                if (count != performerCount) { SetPerformerCount(count); showGroupChoices = false; }
+            }
+            Label("2. BODY POSITION");
             bool upper = DrawChoiceList(upperBodyOnly ? 1 : 0,
-                new[] { "Full body", "Seated / upper body" }, contentWidth, 36) == 1;
+                new[] { "Standing - full body", "Seated - upper body" }, contentWidth, 36) == 1;
             if (upper != upperBodyOnly) SetUpperBodyOnly(upper);
-            if (upperBodyOnly) Label("Keep shoulders and hands visible. Raise hands for legs; tilt shoulders for steering, head and tail. Solo: left hand also drives travel; right hand curls trunk.");
-            int mode = DrawChoiceList((int)inputMode, new[] { "Test sliders", "Camera" }, contentWidth, 34);
+            Label("3. CONTROL");
+            int mode = DrawChoiceList((int)inputMode,
+                new[] { "Use camera (recommended)", "Use test sliders" }, contentWidth, 34);
             if (mode != (int)inputMode) SetInputMode((InputMode)mode);
             Label(Status);
-            GetComponent<DigiPhantLocomotion>()?.DrawControls(contentWidth);
             if (inputMode == InputMode.Camera)
             {
+                Label("Wait until the camera preview is live, then start neutral pose once.");
                 for (int i = 1; i <= performerCount; i++)
                 {
                     string gesture = GestureSummary(i);
@@ -445,21 +453,20 @@ namespace DigiPhant
                 if (IsTeamPauseActive(Time.realtimeSinceStartup))
                     Label("COLLECTIVE PAUSE ACTIVE — lower either hand to resume.");
                 else Label("Gesture Recognizer: everyone shows an open palm for 0.6 seconds to pause.");
-                if (!IsCalibrated) Label("Set neutral pose to begin controlling the elephant.");
+                if (!IsCalibrated) Label("Not ready yet: start neutral pose below.");
                 if (CalibrationPending)
                 {
                     int seconds = Mathf.Max(0, Mathf.CeilToInt(calibrationDeadline - Time.realtimeSinceStartup));
                     Label("Setting neutral pose in " + seconds + " seconds — hold your resting pose.");
-                    if (GUILayout.Button("Cancel countdown")) CancelCalibrationCountdown();
+                    if (GUILayout.Button("Cancel", GUILayout.Width(contentWidth))) CancelCalibrationCountdown();
                 }
-                else if (GUILayout.Button("Set neutral pose (10 seconds)"))
+                else if (GUILayout.Button("START - hold still for 10 seconds", GUILayout.Width(contentWidth)))
                     BeginCalibrationCountdown(Time.realtimeSinceStartup);
-                if (GUILayout.Button("Reassign people")) ReassignPeople();
-                Label("Hold a comfortable pose, then set neutral.");
+                if (GUILayout.Button("Reset people", GUILayout.Width(contentWidth))) ReassignPeople();
             }
             else
             {
-                Label("Move a slider to test its elephant part.");
+                Label("Test mode: move a slider to test one elephant part.");
                 foreach (var c in controls)
                 {
                     Label(c.label + "  · P" + c.performer);
@@ -468,7 +475,10 @@ namespace DigiPhant
                 if (GUILayout.Button("Reset body sliders", GUILayout.Width(contentWidth))) ResetControls();
             }
             GUILayout.Space(8);
-            Label("To adapt: stop Play, select DigiPhant Controls,\nthen edit Controls in the Inspector.");
+            Label("MOVEMENT (optional)");
+            GetComponent<DigiPhantLocomotion>()?.DrawControls(contentWidth);
+            GUILayout.Space(8);
+            Label("Need to change the rig? Stop Play, then select DigiPhant Controls.");
             GUILayout.EndScrollView();
             GUILayout.EndArea();
         }
