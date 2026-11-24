@@ -16,10 +16,9 @@
 The requested public fork now exists at
 `https://github.com/cora-lee/studentstarter`. The branch
 `feature/collective-pause-gesture` contains the uploaded implementation and
-submission documents. Its verified latest remote commit is
-`986a5bf68a12f1c713de83c0278236ebb315c595`
-(`docs: record Unity Play mode verification`). The website upload path was used
-because this computer's terminal Git has no GitHub credential.
+submission documents; its visible branch history is the source of truth for the
+current commit. The website upload path was used because this computer's terminal
+Git has no GitHub credential.
 
 ## Added MediaPipe Vision Task: Gesture Recognizer
 
