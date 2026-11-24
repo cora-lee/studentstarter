@@ -79,10 +79,13 @@ was added. Pose and Gesture Recognizer process the same local frame.
 - PASS: built-in DigiPhant template and locomotion validation completed with return
   code 0, covering rig control, UDP, presets, gaits, turns, additive gestures,
   compound inputs, tracking loss, limits, and reset.
+- PASS: the actual `MammothDigiPhant` scene opened in Unity and entered Play mode.
+  The Game view simultaneously displayed the imported savannah/elephant scene and
+  an unmirrored live camera preview. Play mode was exited normally.
 - FIXED: the supplied seated-input validation now restores Camera mode after its
   Test Sliders step; the complete suite then passed.
-- NOT RUN: interactive UDP-to-Unity Play mode, three-person gesture recognition,
-  human course traversal, or a real Game-view MP4 recording.
+- NOT RUN: three-person gesture recognition, interactive camera-to-control UDP
+  mapping, human course traversal, or a real Game-view MP4 recording.
 
 ## Required live verification
 
