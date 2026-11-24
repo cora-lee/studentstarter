@@ -47,6 +47,17 @@ then try the chosen formation while keeping tracked body parts visible. If extra
 people are visible during assignment, the leftmost selected number in the
 unmirrored preview are used. Keep bystanders out of the camera frame when possible.
 
+### Collective pause gesture
+
+After calibration, every assigned performer can show an open palm for at least
+0.6 seconds to pause the elephant together. This is classified by the additional
+MediaPipe Gesture Recognizer task, then matched to the nearest Pose wrist so the
+interface can display which person and hand made the gesture. The pause stops
+travel immediately and returns gesture-driven body parts toward neutral. When any
+person lowers or closes the hand, control resumes with the same calibration and
+role mapping. The whole selected group must remain visible, so one performer
+cannot silently override another person's controls.
+
 ## Connect the camera
 
 The camera bridge runs on the **same computer** as Unity. It sends movement
