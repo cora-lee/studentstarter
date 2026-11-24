@@ -15,12 +15,17 @@ namespace DigiPhant
         public int slot;
         public float[] values;
         public float[] confidence;
+        public string leftGesture;
+        public float leftGestureScore;
+        public string rightGesture;
+        public float rightGestureScore;
     }
     [Serializable] public class PoseFrame
     {
         public int version;
         public int performerCount;
         public bool upperBodyOnly;
+        public bool teamPause;
         public PerformerFrame[] people;
     }
     [Serializable] public class BoneControl
@@ -56,12 +61,17 @@ namespace DigiPhant
         public string Status { get; private set; } = "Test sliders ready";
         public int ReceivedFrames { get; private set; }
         public bool IsCalibrated { get; private set; }
+        public bool TeamPauseReceived { get; private set; }
         float calibrationDeadline = -1;
         public bool CalibrationPending => calibrationDeadline >= 0;
         readonly float[,] values = new float[4, 6];
         readonly float[,] confidence = new float[4, 6];
         readonly float[,] neutral = new float[4, 6];
         readonly float[] lastSeen = { -1000, -1000, -1000, -1000 };
+        readonly string[] leftGesture = new string[4];
+        readonly string[] rightGesture = new string[4];
+        readonly float[] leftGestureScore = new float[4];
+        readonly float[] rightGestureScore = new float[4];
         readonly Dictionary<Transform, Quaternion> rest = new Dictionary<Transform, Quaternion>();
         UdpClient socket;
         Vector2 scroll;
@@ -149,9 +159,15 @@ namespace DigiPhant
             calibrationDeadline = -1;
             GetComponent<DigiPhantLocomotion>()?.StopMotion();
             IsCalibrated = false;
+            TeamPauseReceived = false;
             Array.Clear(confidence, 0, confidence.Length);
             Array.Clear(neutral, 0, neutral.Length);
-            for (int i = 0; i < 4; i++) lastSeen[i] = -1000;
+            for (int i = 0; i < 4; i++)
+            {
+                lastSeen[i] = -1000;
+                leftGesture[i] = rightGesture[i] = "";
+                leftGestureScore[i] = rightGestureScore[i] = 0;
+            }
         }
         public bool AcceptPacket(string json, float now)
         {
@@ -178,15 +194,31 @@ namespace DigiPhant
                     p.values == null || p.confidence == null || p.values.Length != 6 || p.confidence.Length != 6) return false;
                 for (int k = 0; k < 6; k++)
                     if (!Finite(p.values[k]) || !Finite(p.confidence[k]) || p.confidence[k] < 0 || p.confidence[k] > 1) return false;
+                if (!Finite(p.leftGestureScore) || !Finite(p.rightGestureScore) ||
+                    p.leftGestureScore < 0 || p.leftGestureScore > 1 ||
+                    p.rightGestureScore < 0 || p.rightGestureScore > 1) return false;
             }
+            if (frame.teamPause)
+                for (int slot = 1; slot <= performerCount; slot++)
+                    if (!slots.Contains(slot)) return false;
             Array.Clear(confidence, 0, confidence.Length);
+            for (int i = 0; i < 4; i++)
+            {
+                leftGesture[i] = rightGesture[i] = "";
+                leftGestureScore[i] = rightGestureScore[i] = 0;
+            }
             foreach (var p in frame.people)
             {
                 int i = p.slot - 1;
                 lastSeen[i] = now;
                 for (int k = 0; k < 6; k++)
                 { values[i, k] = Mathf.Clamp(p.values[k], -3, 3); confidence[i, k] = p.confidence[k]; }
+                leftGesture[i] = p.leftGesture ?? "";
+                rightGesture[i] = p.rightGesture ?? "";
+                leftGestureScore[i] = p.leftGestureScore;
+                rightGestureScore[i] = p.rightGestureScore;
             }
+            TeamPauseReceived = frame.teamPause;
             ReceivedFrames++;
             return true;
         }
@@ -217,6 +249,24 @@ namespace DigiPhant
             if (i < 0 || i >= 4 || now - lastSeen[i] > trackingTimeout) return false;
             for (int k = 0; k < 6; k++) if (confidence[i, k] >= minimumConfidence) return true;
             return false;
+        }
+        public bool IsTeamPauseActive(float now)
+        {
+            if (!TeamPauseReceived || inputMode != InputMode.Camera) return false;
+            for (int slot = 1; slot <= performerCount; slot++)
+                if (!IsTracked(slot, now)) return false;
+            return true;
+        }
+        public string GestureSummary(int slot)
+        {
+            int i = slot - 1;
+            if (i < 0 || i >= performerCount) return "";
+            var parts = new List<string>();
+            if (!string.IsNullOrEmpty(leftGesture[i]))
+                parts.Add("L " + leftGesture[i] + " " + leftGestureScore[i].ToString("0.00"));
+            if (!string.IsNullOrEmpty(rightGesture[i]))
+                parts.Add("R " + rightGesture[i] + " " + rightGestureScore[i].ToString("0.00"));
+            return string.Join(" · ", parts);
         }
         public void ReassignPeople()
         {
@@ -298,6 +348,7 @@ namespace DigiPhant
             foreach (var pair in rest) if (pair.Key != null) pair.Key.localRotation = pair.Value;
             var locomotion = GetComponent<DigiPhantLocomotion>();
             bool animated = locomotion != null && locomotion.isActiveAndEnabled && locomotion.Evaluate(now, dt);
+            bool teamPause = IsTeamPauseActive(now);
             foreach (var c in controls)
             {
                 float target = 0;
@@ -305,7 +356,7 @@ namespace DigiPhant
                 if (i >= 0 && i < performerCount && k >= 0 && k < 6)
                 {
                     if (inputMode == InputMode.TestSliders) target = c.testValue;
-                    else if (IsCalibrated && IsTracked(c.performer, now) && confidence[i, k] >= minimumConfidence)
+                    else if (!teamPause && IsCalibrated && IsTracked(c.performer, now) && confidence[i, k] >= minimumConfidence)
                         target = values[i, k] - neutral[i, k];
                 }
                 target = Mathf.Clamp(target * c.sensitivity, -1, 1);
@@ -357,7 +408,14 @@ namespace DigiPhant
             if (inputMode == InputMode.Camera)
             {
                 for (int i = 1; i <= performerCount; i++)
-                    Label("Performer " + i + (IsTracked(i, Time.realtimeSinceStartup) ? " · visible" : " · waiting / lost"));
+                {
+                    string gesture = GestureSummary(i);
+                    Label("Performer " + i + (IsTracked(i, Time.realtimeSinceStartup) ? " · visible" : " · waiting / lost") +
+                        (string.IsNullOrEmpty(gesture) ? "" : " · " + gesture));
+                }
+                if (IsTeamPauseActive(Time.realtimeSinceStartup))
+                    Label("COLLECTIVE PAUSE ACTIVE — lower either hand to resume.");
+                else Label("Gesture Recognizer: everyone shows an open palm for 0.6 seconds to pause.");
                 if (!IsCalibrated) Label("Set neutral pose to begin controlling the elephant.");
                 if (CalibrationPending)
                 {

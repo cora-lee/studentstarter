@@ -154,7 +154,13 @@ namespace DigiPhant
             dt = Mathf.Clamp(dt, 0, .1f);
             float desiredForward = testForward, desiredTurn = testSteering;
             bool valid = true;
-            if (controller.inputMode == InputMode.Camera)
+            if (controller.inputMode == InputMode.Camera && controller.IsTeamPauseActive(now))
+            {
+                // Stop immediately instead of smoothing through the raised-hand
+                // values that normally drive travel.
+                throttle = turn = desiredForward = desiredTurn = 0;
+            }
+            else if (controller.inputMode == InputMode.Camera)
             {
                 bool moving = forward.TryRead(controller, now, out desiredForward);
                 bool turning = steering.TryRead(controller, now, out desiredTurn);
