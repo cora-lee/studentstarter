@@ -159,12 +159,13 @@ namespace DigiPhant
         {
             if (!showPreview) return;
             GUILayout.Label("CAMERA PREVIEW");
+            width = Mathf.Max(120, width);
             float height = Mathf.Min(width * .75f, Screen.height * .25f);
-            Rect picture = GUILayoutUtility.GetRect(width, height, GUILayout.ExpandWidth(true));
+            Rect picture = GUILayoutUtility.GetRect(width, height, GUILayout.Width(width));
             GUI.DrawTexture(picture, Texture2D.blackTexture, ScaleMode.StretchToFill, false);
             if (HasLiveFrame) GUI.DrawTexture(picture, texture, ScaleMode.ScaleToFit);
             GUILayout.BeginHorizontal();
-            GUILayout.Label(Status, new GUIStyle(GUI.skin.label) { wordWrap = true, fontSize = 11 });
+            GUILayout.Label(Status, new GUIStyle(GUI.skin.label) { wordWrap = true, fontSize = 11 }, GUILayout.Width(width - 58));
             if (GUILayout.Button("Retry", GUILayout.Width(54))) BeginPreview();
             GUILayout.EndHorizontal();
         }
